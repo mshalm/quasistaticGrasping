@@ -1,4 +1,6 @@
 function slidingCircleWithWall(save_video)
+% SLIDINGCIRCLEWITHWALL generates figures and video for a a rolling
+% against a wall example.
 if (nargin < 1)
    save_video = false; 
 end
@@ -11,7 +13,6 @@ vM = [vMx1 vMy1 vMx2 vMy2]';
 
 radius = 1;
 
-R = inline('[cos(t), -sin(t); sin(t), cos(t)]');
 S = inline('[0 -t; t 0]');
 renorm = @(t) sqrt(t(1)^2 + t(2)^2);
 

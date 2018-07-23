@@ -1,4 +1,5 @@
 function polygonalPegInHole(save_video)
+% POLYGONALPEGINHOLE generates figures and video for a peg-in-hole example.
 if (nargin < 1)
    save_video = false; 
 end

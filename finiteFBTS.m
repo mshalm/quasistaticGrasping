@@ -1,4 +1,7 @@
-function [qOp, qMp, z, ctime] = finiteFBTS(qO, qM, NO, NM, LO, LM, u, A, B, mu, phi, h)
+function [qOp, qMp, z, ctime] = finiteFBTS(qO, qM, NO, NM, LO, LM, u, ...
+    A, B, mu, phi, h)
+% FINITEFBTS solves finite-feedback timestepping LCP, and computes
+% new positions after a time-step of h seconds.
 JO = [NO; LO];
 JM = [NM; LM];
 [m, ~] = size(NO);
@@ -18,10 +21,6 @@ q = [h*JM*u; z] + [phi; ze; z];
 tic;
 z = pathlcp(M,q);
 ctime = toc;
-%[~,z,ret] = LCPSolve(M,q);
-%if (ret == 2)
-%    error('Lemke Alg Failed!') 
-%end
 n = z(1:m);
 l = z((m + 1):(m * (2 * o + 1)));
 f = [n; l];

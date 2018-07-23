@@ -1,11 +1,12 @@
 function [vw, phi, JN, JT] = polyGeometry(vb_om, vb_stat, c, th)
 %POLYGEOMETRY generates necessary distances and jacobians for
-%multi-polygonal system. Arguments are cell arrays indexed by body number.
+%multi-polygonal system. All polygons are assumed to be convex.
+% Arguments are cell arrays indexed by body number.
 % This function assumse q = [c{1}; th{1}; c{2}; th{2}; ...]
 %   vb_om: body-coordinate vertices of mobile bodies in counter-clockwise order
 %   vb_stat: body-coordinate vertices of static bodies in counter-clockwise order
 %   c: world-coordinate centers of bodies
-%   th: rotations between body coordinates and world coordinates
+%   th: angles between body coordinates and world coordinates
     R = inline('[cos(t), -sin(t); sin(t), cos(t)]');
     epsilon = 1e-8;
     n_om = numel(vb_om);
@@ -20,6 +21,7 @@ function [vw, phi, JN, JT] = polyGeometry(vb_om, vb_stat, c, th)
     [c_stat{:}] = deal([0;0]);
     th = [th, th_stat];
     c = [c, c_stat];
+    
     %calculate world-frame vertices edge normals, and boundary inequality
     vw = cell(1,nb);
     
@@ -61,26 +63,17 @@ function [vw, phi, JN, JT] = polyGeometry(vb_om, vb_stat, c, th)
         end
         for i=1:n_om
             for j=(i+1):nb
-                
-                %[p1, p2] = closestQP(n_hat{i}',  b{i}, n_hat{j}', b{j});
-
-                % phi_ij = norm(p2 - p1);
-
-                %if (phi_ij <= epsilon)
-                    % contact is occuring, reassign to maximal vertex depth
+                    % model each contact as penetration depth of a point
+                    % on one polygon into another polygon
                     v_pen{i,j} = max(n_hat{j}'*vw{i} - repmat(b{j},[1 n_vert{i}]));
                     
                     v_pen{j,i} = max(n_hat{i}'*vw{j} - repmat(b{i},[1 n_vert{j}]));
-                    %{
 
-                    [close_i, id_i] = sort(v_pen{i,j});
-                    [close_j, id_j] = sort(v_pen{j,i});
-                    phi((4*ncon-3):4*ncon) = [close_i(1:2) close_j(1:2)];
-                    id_i = id_i(1:2);
-                    id_j = id_j(1:2);
-                    %}
                     phi(ncon:(ncon+n_vert{i}+n_vert{j}-1)) = [v_pen{i,j} v_pen{j,i}];
                     
+                    % construct normal and tangential jacobians according
+                    % to Zhou et al. 2018:
+                    % https://doi.org/10.1177/0278364918755536
                     if (nargout > 2)
                        lociter = 0;
                        for id=1:n_vert{i}
@@ -89,11 +82,6 @@ function [vw, phi, JN, JT] = polyGeometry(vb_om, vb_stat, c, th)
                            edge = find(j_depth == max(j_depth));
                            vjac = velocityJacobian(c{j}, j_close, c{i}, vw{i}(:,id));
                            if (j <= n_om)
-                            %{
-                            JN(4*ncon-3+lociter,qidx(j)) = n_hat{j}(:,edge(1))'*vjac(:,1:3);
-                            JT(8*ncon-7+2*lociter,qidx(j)) = t_hat{j}(:,edge(1))'*vjac(:,1:3);
-                            JT(8*ncon-6+2*lociter,qidx(j)) = -t_hat{j}(:,edge(1))'*vjac(:,1:3);
-                            %}
                             JN(ncon+lociter,qidx(j)) = n_hat{j}(:,edge(1))'*vjac(:,1:3);
                             JT(2*(ncon+lociter)-1,qidx(j)) = t_hat{j}(:,edge(1))'*vjac(:,1:3);
                             JT(2*(ncon+lociter),qidx(j)) = -t_hat{j}(:,edge(1))'*vjac(:,1:3);
@@ -112,11 +100,6 @@ function [vw, phi, JN, JT] = polyGeometry(vb_om, vb_stat, c, th)
                            edge = find(i_depth == max(i_depth));
                            vjac = velocityJacobian(c{i}, i_close, c{j}, vw{j}(:,id));
                            if (i <= n_om)
-                               %{
-                            JN(4*ncon-3+lociter,qidx(i)) = n_hat{i}(:,edge(1))'*vjac(:,1:3);
-                            JT(8*ncon-7+2*lociter,qidx(i)) = t_hat{i}(:,edge(1))'*vjac(:,1:3);
-                            JT(8*ncon-6+2*lociter,qidx(i)) = -t_hat{i}(:,edge(1))'*vjac(:,1:3);
-                            %}
                             JN(ncon+lociter,qidx(i)) = n_hat{i}(:,edge(1))'*vjac(:,1:3);
                             JT(2*(ncon+lociter)-1,qidx(i)) = t_hat{i}(:,edge(1))'*vjac(:,1:3);
                             JT(2*(ncon+lociter),qidx(i)) = -t_hat{i}(:,edge(1))'*vjac(:,1:3);
@@ -137,29 +120,22 @@ function [vw, phi, JN, JT] = polyGeometry(vb_om, vb_stat, c, th)
     
     
     function [p] = v2bQP(v,A,b)
-        % cost_fun = 0.5*norm(p1 - p2)^2
+        % Finds closest point in polygon A * x \leq b by solving the QP
+        % 
+        % min_p1   norm(p1 - v)^2
+        %   s.t.   A*p1 \leq b
         f = -2*v;
         H = 2*eye(2);
         options =  optimoptions('quadprog','Display','off');
         p = quadprog(H,f,A,b,[],[],[],[],[],options);
     end
     
-    function [p1, p2] = b2bQP(A1,b1,A2,b2)
-        % cost_fun = 0.5*norm(p1 - p2)^2
-        f = zeros(4,1);
-        H = [eye(2), -eye(2); -eye(2), eye(2)];
-        Amat = [A1, 0*A1; 0*A2, A2];
-        bvec = [b1; b2];
-        options =  optimoptions('Display','off');
-        qpresult = quadprog(H,f,Amat,bvec);
-        p1 = qpresult(1:2);
-        p2 = qpresult(3:4);
-    end
-    
 
     function out = qidx(i)
-       out = [((1:3) + 3*(i-1))];
+       out = (1:3) + 3*(i-1);
     end
+
+
     function out = velocityJacobian(c1,p1,c2,p2)
         p1x = p1(1);
         p1y = p1(2);
@@ -176,7 +152,5 @@ function [vw, phi, JN, JT] = polyGeometry(vb_om, vb_stat, c, th)
         out = [out1 out2];
         
     end
-
-
 end
 

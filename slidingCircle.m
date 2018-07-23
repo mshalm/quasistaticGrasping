@@ -1,4 +1,5 @@
 function slidingCircle(save_video)
+% SLIDINGCIRCLE generates three examples of pushing a circle.
 if (nargin < 1)
    save_video = false; 
 end
@@ -82,10 +83,12 @@ geoFun = @(q0, qM) scGeo(q0, qM, suffix);
 
 simfun = @finiteFBTS;
 
+sim_lengths = {70,70,70};
+
 for i=1:3
     paramFun = @() scParams(0);
     figure(1);
-    nfin = 22;
+    nfin = sim_lengths{i};
     nplot = 14;
     c_vector = [];
     e_vector = [];
@@ -231,8 +234,8 @@ end
     function plotStyleConvergence
         set(gca,'TickLabelInterpreter','latex')
         grid on
-        xlabel('$-\log (c_i)$','Interpreter','latex');
-        ylabel('$\log (e_i)$','Interpreter','latex');
+        xlabel('$-\log_2 (c_i)$','Interpreter','latex');
+        ylabel('$\log_2 (e_i)$','Interpreter','latex');
         axis tight;
         axis square;
     end

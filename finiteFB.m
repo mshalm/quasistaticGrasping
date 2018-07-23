@@ -1,4 +1,6 @@
-function [qOp, qMp] = finiteFB(qO, qM, NO, NM, LO, LM, u, A, B, mu, phi, h)
+function [qOp, qMp, z, ctime] = finiteFB(qO, qM, NO, NM, LO, LM, u, A, B, mu, phi, h)
+% FINITEFB solves finite-feedback velocity-based LCP, and computes
+% new positions after a time-step of h seconds.
 JO = [NO; LO];
 JM = [NM; LM];
 [m, ~] = size(N0);

@@ -1,5 +1,6 @@
-function [t,qO,qM,ctime] = simulateQuasiStatics(simfun, geoFun, u, params, qO0, qM0, nsteps, h)
-epsilon = 1e-8;
+function [t,qO,qM,ctime] = simulateQuasiStatics(simfun, geoFun, u, ...
+    params, qO0, qM0, nsteps, h)
+epsilon = 1e-6;
 nqO = numel(qO0);
 nqM = numel(qM0);
 [mu, A, B, fbscale] = params();
@@ -11,6 +12,8 @@ qO(:,1) = qO0;
 qM(:,1) = qM0;
 t(1) = 0;
 ctime(1) = 0;
+sim_broke = false;
+phi_negative = false;
 for i=1:nsteps
     tc = t(i);
     qOc = qO(:,i);
@@ -23,9 +26,13 @@ for i=1:nsteps
     begin = ceil(log2(max([1 num_con])/num_tot));
     [phic,NOc,NMc,LOc,LMc] = geoFun(qOc, qMc);
     uc = u(qc,tc);
-    sim_broke = false;
+    
     for imprep = 1:1
-        
+        if (sim_broke)
+            qOp = qOc;
+            qMp = qMc;
+           break 
+        end
         for sel=begin:0
             num_cur_con = ceil(2^(sel)*num_tot);
             ri = phisort(1:num_cur_con);
@@ -39,10 +46,15 @@ for i=1:nsteps
             phict = phic(ri);
             muct = mu(ri,ri);
             try
-                [qOp, qMp, z, ctemp] = simfun(qOc, qMc, NOct, NMct, LOct, LMct, uc, A, fbscale*B, muct, phict, h);
+                [qOp, qMp, z, ctemp] = simfun(qOc, qMc, NOct, NMct, ... 
+                    LOct, LMct, uc, A, fbscale*B, muct, phict, h);
             catch except
-                disp('SIMULATION FAILED!')
-                t(i)
+                if (~sim_broke)
+                    warning(['PATH failed to solve time-step at ' ...
+                        't = %.4f. Manipulator and object jamming is ' ...
+                        'assumed for the remainder of the trajectory.'],...
+                        t(i));
+                end
                 sim_broke = true;
                 break
             end
@@ -53,15 +65,7 @@ for i=1:nsteps
                 break;
             end
         end
-        %{
-        try
-            [qOp, qMp, z] = simfun(qOc, qMc, NOc, NMc, LOc, LMc, uc, A, fbscale*B, mu, phic, h);
-        catch except
-            disp('SIMULATION FAILED!')
-            t(i)
-            break
-        end
-        %}
+
         if (sim_broke)
            break 
         end
@@ -69,17 +73,15 @@ for i=1:nsteps
         if (nnz(phip < -epsilon) == 0)
                 break; 
         end
-        %qOc = qOp;
-        %qMc = qMp;
-        %qc = [qOc; qMc];
         [~,NOc,NMc,LOc,LMc] = geoFun(qOp, qMp);
     end
     phip = geoFun(qOp, qMp);
     if (nnz(phip < -epsilon) > 0)
-        t(i)
-        min(phip)
-        disp('negative phi!');
-        %break;
+        if (~phi_negative)
+        warning(['phi below negative tolerance (%.4e) beginning ' ...
+             'at t = %.4f with value %.4e'], -epsilon, t(i), min(phip));
+        end
+        phi_negative = true;
     end
        
     qO(:,i+1) = qOp;
